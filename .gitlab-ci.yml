@@ -1,0 +1,89 @@
+stages:
+  - test
+  - build_development
+  - build_production
+  - deploy_development
+  - deploy_production
+
+
+test:
+  tags:
+    - un8
+  stage: test
+  script:
+    - pwd
+    - ls
+    - echo "Testing success"
+
+build-production:
+  tags:
+    - prod
+  variables:
+    CI_REGISTRY: unsircle/els-tokopedia
+    CI_REGISTRY_IMAGE: "$CI_REGISTRY:$CI_PIPELINE_ID"
+  image: docker:latest
+  stage: build_production
+  services:
+    - docker:dind
+  #before_script:
+  #  - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD"
+  script:
+    - git checkout -- .env
+    - cp .env.production .env
+    - cat .env
+    - docker build -t "$CI_REGISTRY_IMAGE" .
+    - docker push "$CI_REGISTRY_IMAGE"
+    - git checkout -- .env
+  only:
+    - master
+
+build-development:
+  tags:
+    - dev
+  variables:
+    CI_REGISTRY: unsircle/els-tokopedia
+    CI_REGISTRY_IMAGE: "$CI_REGISTRY:$CI_PIPELINE_ID"
+  image: docker:latest
+  stage: build_development
+  services:
+    - docker:dind
+  #before_script:
+  #  - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD
+  script:
+    - git checkout -- .env
+    - cp .env.development .env
+    - cat .env
+    - docker build -t "$CI_REGISTRY_IMAGE" .
+    - docker push "$CI_REGISTRY_IMAGE"
+    - git checkout -- .env
+  only:
+    - development
+
+deploy-development:
+  tags:
+    - dev
+  variables:
+    CI_REGISTRY: unsircle/els-tokopedia
+    CI_REGISTRY_IMAGE: "$CI_REGISTRY:$CI_PIPELINE_ID"
+  stage: deploy_development
+  script :
+    - echo "Deploying to development"
+    - k8s-environtment dev office
+    - kubectl set image deployment/els-tokopedia -n development els-tokopedia=$CI_REGISTRY_IMAGE
+  only:
+    - development
+
+deploy-production:
+  tags:
+    - prod
+  variables:
+    CI_REGISTRY: unsircle/els-tokopedia
+    CI_REGISTRY_IMAGE: "$CI_REGISTRY:$CI_PIPELINE_ID"
+  stage: deploy_production
+  script :
+    - echo "Deploying to master"
+    - k8s-environtment prod exabytes
+    - kubectl set image deployment/els-tokopedia -n production els-tokopedia=$CI_REGISTRY_IMAGE
+  only:
+    - master
+  when: manual
